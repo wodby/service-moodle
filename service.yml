@@ -1,0 +1,142 @@
+name: moodle
+type: service
+from: php
+guidance: GUIDANCE.md
+fromVersionConstraint: "^3.0.0"
+fromVersion: "3.2.4"
+title: PHP (Moodle)
+
+labels:
+- moodle
+
+# Moodle 5.3 supports PHP 8.3 and 8.4.
+options:
+- version: '8.4'
+  default: true
+- version: '8.3'
+
+links:
+# Moodle has separate drivers for MariaDB and MySQL, which the shared driver
+# variable does not tell apart.
+- name: db
+  env:
+  - name: DB_KIND
+    value: '{{link.database.kind}}'
+- name: moodledata
+  title: Moodle data storage
+  required: true
+  selectors:
+  - type: storage
+- name: redis
+  title: Redis
+  env:
+  - name: REDIS_HOST
+    value: '{{link.host}}'
+  - name: REDIS_PORT
+    value: '{{link.port}}'
+  - name: REDIS_PASSWORD
+    value: '{{link.tokens.password}}'
+    secret: true
+  selectors:
+  - type: datastore
+    labels:
+    - redis
+  - type: datastore
+    labels:
+    - valkey
+
+# Moodle's data directory. Every replica and the cron worker read and write the
+# same files, so the volume is shared.
+volumes:
+- name: moodledata
+  title: Moodle data
+  link: moodledata
+  shared: true
+  size: 10
+  path: /mnt/files
+  import:
+    owner: 82
+    group: 82
+
+env:
+- name: MOODLE_DATAROOT
+  value: /mnt/files/moodledata
+# Moodle refuses to save forms with more fields than this, such as large
+# grader reports and role definitions.
+- name: PHP_MAX_INPUT_VARS
+  value: '5000'
+- name: PHP_UPLOAD_MAX_FILESIZE
+  value: 256M
+- name: PHP_POST_MAX_SIZE
+  value: 256M
+# Moodle's security check asks for this, so that stack traces carry no
+# argument values such as passwords.
+- name: PHP_ZEND_EXCEPTION_IGNORE_ARGS
+  value: '1'
+  envType: prod
+
+derivatives:
+# Moodle needs its cron every minute, more often than a service cron schedule
+# runs. This worker keeps Moodle's cron running instead: each run polls for new
+# tasks for 15 minutes, Moodle's longest keep-alive, and the next one follows.
+- name: moodle-cron
+  icon: moodle
+  title: Moodle Cron
+  args:
+  - sh
+  - -c
+  - |
+    # Moodle's cron stops after its current task on SIGTERM. The image's stop
+    # signal is SIGQUIT, for PHP-FPM, so a stop is passed on to cron as SIGTERM.
+    trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid"; exit 0' TERM INT QUIT
+    while true; do
+      php admin/cli/cron.php --keep-alive=900 &
+      pid=$!
+      # Cron fails until Moodle is installed; it is tried again a minute later.
+      wait "$pid" || { sleep 60 & pid=$!; wait "$pid"; }
+    done
+  type: service
+  default: true
+  required: false
+
+build:
+  connect: true
+  dockerfile: Dockerfile
+  boilerplates:
+  - name: vanilla
+    title: Vanilla Moodle
+    repo: https://github.com/moodle/moodle
+    tag: ~5.3
+    pipeline: pipeline.yml
+    optionVersionConstraint: "^8.3"
+
+actions:
+- name: upgrade
+  title: Run upgrade
+  args:
+  - sh
+  - -c
+  # Nothing to upgrade until Moodle has been installed.
+  - 'if php admin/cli/cfg.php --name=version >/dev/null 2>&1; then php admin/cli/upgrade.php --non-interactive; fi'
+  type: post_deploy
+- name: purge_caches
+  title: Purge all caches
+  args:
+  - php
+  - admin/cli/purge_caches.php
+  type: button
+
+workloads:
+- name: main
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: '{{helm.release}}'
+  kind: deployment
+  primary: true
+  containers:
+  - name: php
+    image: wodby/php
+    build: true
+
+# Parent upgrades must not enable unvalidated workspace behavior.
+workspace: false

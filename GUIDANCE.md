@@ -38,7 +38,7 @@ The `moodle-cron` derivative runs Moodle's cron continuously: each `php admin/cl
 
 ## PHP settings
 
-`max_input_vars` is 5000, as Moodle requires. Uploads and form posts are limited to 256 MB, matching the Nginx service. In production environments `zend.exception_ignore_args` is on.
+`max_input_vars` is 5000, as Moodle requires. Uploads and form posts are limited to 256 MB, matching the Nginx service. `zend.exception_ignore_args` is on in every environment, so stack traces don't show argument values.
 
 ## Limits
 

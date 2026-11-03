@@ -58,7 +58,31 @@ volumes:
     owner: 82
     group: 82
 
+settings:
+# The administrator account the first deployment creates. Moodle is installed
+# from these values instead of its web installer.
+- name: admin-username
+  title: Admin username
+  description: Username of the Moodle administrator created on the first deployment.
+  default: admin
+  var: MOODLE_ADMIN_USERNAME
+- name: admin-password
+  title: Admin password
+  description: Password of the Moodle administrator created on the first deployment. A password that doesn't meet Moodle's password policy must be changed at the first sign-in.
+  required: true
+  secret: true
+  var: MOODLE_ADMIN_PASSWORD
+- name: admin-email
+  title: Admin email
+  description: Email address of the Moodle administrator. When empty, Moodle asks for it at the first sign-in.
+  var: MOODLE_ADMIN_EMAIL
+
 env:
+# The site's names on the first deployment; both can be changed in Moodle later.
+- name: MOODLE_SITE_FULLNAME
+  value: '{{app.title}}'
+- name: MOODLE_SITE_SHORTNAME
+  value: '{{app.name}}'
 - name: MOODLE_DATAROOT
   value: /mnt/files/moodledata
 # Moodle refuses to save forms with more fields than this, such as large
@@ -110,13 +134,48 @@ build:
     optionVersionConstraint: "^8.3"
 
 actions:
+# Installs Moodle on the first deployment and upgrades it on later ones, so the
+# web installer is never used: no one else can claim the site before its admin,
+# and no page is loaded while the installer rebuilds Moodle's caches.
 - name: upgrade
-  title: Run upgrade
+  title: Install or upgrade Moodle
   args:
   - sh
   - -c
-  # Nothing to upgrade until Moodle has been installed.
-  - 'if php admin/cli/cfg.php --name=version >/dev/null 2>&1; then php admin/cli/upgrade.php --non-interactive; fi'
+  - |
+    set -eu
+    # An installed site is upgraded when the deployed code is newer.
+    if php admin/cli/cfg.php --name=version >/dev/null 2>&1; then
+      exec php admin/cli/upgrade.php --non-interactive
+    fi
+    if [ -z "${MOODLE_ADMIN_PASSWORD:-}" ]; then
+      echo "Moodle is not installed, or its database can't be read. To install it, set the Admin password setting of this service and deploy again." >&2
+      exit 1
+    fi
+    # install_database.php stops when Moodle's tables exist, so a database that
+    # couldn't be read above is never installed over. It takes the password only
+    # as an argument, so it gets a throwaway one; the real password is set from
+    # the environment next and never appears in a process list.
+    php admin/cli/install_database.php --agree-license \
+      --adminuser="${MOODLE_ADMIN_USERNAME:-admin}" \
+      --adminpass="$(head -c 32 /dev/urandom | base64)" \
+      --adminemail="${MOODLE_ADMIN_EMAIL:-}" \
+      --fullname="${MOODLE_SITE_FULLNAME:-Moodle}" \
+      --shortname="${MOODLE_SITE_SHORTNAME:-moodle}"
+    # A password that doesn't meet Moodle's password policy must be changed at
+    # the first sign-in.
+    php -r '
+      define("CLI_SCRIPT", true);
+      require "config.php";
+      $admin = get_admin();
+      $password = getenv("MOODLE_ADMIN_PASSWORD");
+      update_internal_user_password($admin, $password);
+      $error = "";
+      if (!check_password_policy($password, $error, $admin)) {
+          set_user_preference("auth_forcepasswordchange", 1, $admin);
+          echo "The admin password does not meet the password policy; Moodle will ask for a new one at the first sign-in.\n";
+      }
+    '
   type: post_deploy
 - name: purge_caches
   title: Purge all caches

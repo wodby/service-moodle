@@ -29,8 +29,14 @@ The `moodle-cron` derivative runs Moodle's cron continuously: each `php admin/cl
 
 ## Installation and upgrades
 
-- Moodle is installed from the web: open the site, accept the licence, then create the administrator account. Until that is done, anyone who opens the site can do it.
-- After every deployment the service runs `php admin/cli/upgrade.php --non-interactive` once Moodle is installed. The upgrade turns maintenance mode on while it runs.
+Moodle's web installer is not used. After every deployment the service's **Install or upgrade Moodle** action runs:
+
+- **First deployment:** it installs Moodle into the empty database with `admin/cli/install_database.php`. The administrator is created from the service's settings: `admin-username` (default `admin`, variable `MOODLE_ADMIN_USERNAME`), `admin-password` (required, secret, `MOODLE_ADMIN_PASSWORD`) and `admin-email` (optional, `MOODLE_ADMIN_EMAIL`). The site's full and short names are the app's title and name (`MOODLE_SITE_FULLNAME`, `MOODLE_SITE_SHORTNAME`); both can be changed in Moodle later.
+- A password that doesn't meet Moodle's password policy must be changed at the first sign-in. Without an admin email, Moodle asks for it at the first sign-in.
+- Without an admin password, the action fails and asks for one; nothing is installed.
+- **Later deployments:** it runs `php admin/cli/upgrade.php --non-interactive`. The upgrade turns maintenance mode on while it runs.
+- The installer never runs over existing tables: if the database can't be read, the action fails instead.
+- Changing the admin settings after the first deployment does not change the account; change it in Moodle.
 
 ## Actions
 
@@ -49,4 +55,5 @@ The `moodle-cron` derivative runs Moodle's cron continuously: each `php admin/cl
 
 - **Site administration > Server > Environment** shows Moodle's own checks.
 - `php admin/cli/cfg.php --name=version` prints the installed version; it fails before installation.
+- The deployment's post-deploy log shows the install or upgrade output.
 - `php admin/cli/cron.php --list` in the cron worker lists the tasks running now.

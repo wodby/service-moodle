@@ -29,6 +29,7 @@ build configuration and Wodby CI:
 | Inherits from | [`php`](https://github.com/wodby/service-php) with version constraint `^3.0.0` |
 | Versions | `8.4` by default, `8.3` |
 | Service links | Moodle data storage, required; Redis |
+| Settings | Admin username, Admin password (required), Admin email |
 | Volumes | `moodledata`, shared |
 | Derivatives | `moodle-cron` |
 | Application build | Git source connection enabled; Dockerfile: `Dockerfile`; boilerplates: Vanilla Moodle |

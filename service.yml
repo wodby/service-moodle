@@ -69,11 +69,10 @@ env:
   value: 256M
 - name: PHP_POST_MAX_SIZE
   value: 256M
-# Moodle's security check asks for this, so that stack traces carry no
-# argument values such as passwords.
+# Moodle's installer and security check ask for this in every environment, so
+# that stack traces carry no argument values such as passwords.
 - name: PHP_ZEND_EXCEPTION_IGNORE_ARGS
   value: '1'
-  envType: prod
 
 derivatives:
 # Moodle needs its cron every minute, more often than a service cron schedule

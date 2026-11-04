@@ -1,20 +1,13 @@
-# PHP (Moodle) service for Kubernetes on Wodby
+# Moodle service for Kubernetes on Wodby
 
-Build and run Moodle LMS on Kubernetes with Wodby.
+Run Moodle LMS on Kubernetes with Wodby.
 
 This repository defines the Wodby service manifests and operational
-configuration for PHP (Moodle).
+configuration for Moodle.
 
 - [Browse Wodby services](https://wodby.com/services)
 - [Wodby service documentation](https://wodby.com/docs/2.0/services/)
 - [Service manifest reference](https://wodby.com/docs/2.0/services/template/)
-
-## Start with a boilerplate
-
-Use one of the boilerplates exposed by this service to start with compatible
-build configuration and Wodby CI:
-
-- [Vanilla Moodle](https://github.com/moodle/moodle)
 
 ## Wodby stacks using this service
 
@@ -26,13 +19,12 @@ build configuration and Wodby CI:
 | --- | --- |
 | Service name | `moodle` |
 | Type | Application service |
-| Inherits from | [`php`](https://github.com/wodby/service-php) with version constraint `^3.0.0` |
-| Versions | `8.4` by default, `8.3` |
-| Service links | Moodle data storage, required; Redis |
+| Image | [wodby/moodle](https://github.com/wodby/moodle), prebuilt; no application build |
+| Versions | `5.3` by default |
+| Service links | Database, required; Moodle data storage, required; Mail Transfer Agent; Redis |
 | Settings | Admin username, Admin password (required), Admin email |
 | Volumes | `moodledata`, shared |
 | Derivatives | `moodle-cron` |
-| Application build | Git source connection enabled; Dockerfile: `Dockerfile`; boilerplates: Vanilla Moodle |
 | Operations | 2 actions |
 
 ## Use this service

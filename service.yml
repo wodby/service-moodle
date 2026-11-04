@@ -1,27 +1,76 @@
 name: moodle
 type: service
-from: php
+icon: moodle
+title: Moodle
+scalable: true
 guidance: GUIDANCE.md
-fromVersionConstraint: "^3.0.0"
-fromVersion: "3.2.4"
-title: PHP (Moodle)
 
 labels:
 - moodle
 
-# Moodle 5.3 supports PHP 8.3 and 8.4.
+# Moodle releases. Each tag of the wodby/moodle image holds that release with
+# its Composer packages on PHP 8.4.
 options:
-- version: '8.4'
+- version: '5.3'
   default: true
-- version: '8.3'
+  tag: 5.3-r0
+
+endpoints:
+- name: fpm
+  ports:
+  - name: fpm
+    number: 9000
+    main: true
+    protocol: tcp
 
 links:
-# Moodle has separate drivers for MariaDB and MySQL, which the shared driver
-# variable does not tell apart.
 - name: db
+  title: Database
+  required: true
+  # A managed database server's CA certificate, mounted when the server has one, so Moodle connects over TLS.
+  database:
+    ca:
+      filepath: /etc/wodby/db/ca.pem
   env:
+  - name: DB_HOST
+    value: '{{link.database.host}}'
+  - name: DB_PORT
+    value: '{{link.database.port}}'
+  - name: DB_NAME
+    value: '{{link.database.db.name}}'
+  - name: DB_USERNAME
+    value: '{{link.database.user.name}}'
+  - name: DB_PASSWORD
+    value: '{{link.database.user.password}}'
+    secret: true
+  # Moodle has separate drivers for MariaDB, MySQL and PostgreSQL.
   - name: DB_KIND
     value: '{{link.database.kind}}'
+  # The path of the server's CA certificate when it has one, otherwise empty.
+  - name: DB_SSL_CA
+    value: '{{link.database.caFile}}'
+  selectors:
+  - type: db
+    labels:
+    - mariadb
+  - type: db
+    labels:
+    - mysql
+  - type: db
+    labels:
+    - postgres
+- name: sendmail
+  title: Mail Transfer Agent
+  required: false
+  env:
+  - name: MSMTP_HOST
+    value: '{{link.host}}'
+  - name: MSMTP_PORT
+    value: '{{link.port}}'
+  selectors:
+  - type: service
+    labels:
+    - smtpd
 - name: moodledata
   title: Moodle data storage
   required: true
@@ -85,99 +134,28 @@ env:
   value: '{{app.name}}'
 - name: MOODLE_DATAROOT
   value: /mnt/files/moodledata
-# Moodle refuses to save forms with more fields than this, such as large
-# grader reports and role definitions.
-- name: PHP_MAX_INPUT_VARS
-  value: '5000'
-- name: PHP_UPLOAD_MAX_FILESIZE
-  value: 256M
-- name: PHP_POST_MAX_SIZE
-  value: 256M
-# Moodle's installer and security check ask for this in every environment, so
-# that stack traces carry no argument values such as passwords.
-- name: PHP_ZEND_EXCEPTION_IGNORE_ARGS
-  value: '1'
 
 derivatives:
 # Moodle needs its cron every minute, more often than a service cron schedule
-# runs. This worker keeps Moodle's cron running instead: each run polls for new
-# tasks for 15 minutes, Moodle's longest keep-alive, and the next one follows.
+# runs. This worker keeps Moodle's cron running; see moodle-cron in the image.
 - name: moodle-cron
   icon: moodle
   title: Moodle Cron
   args:
-  - sh
-  - -c
-  - |
-    # Moodle's cron stops after its current task on SIGTERM. The image's stop
-    # signal is SIGQUIT, for PHP-FPM, so a stop is passed on to cron as SIGTERM.
-    trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid"; exit 0' TERM INT QUIT
-    while true; do
-      php admin/cli/cron.php --keep-alive=900 &
-      pid=$!
-      # Cron fails until Moodle is installed; it is tried again a minute later.
-      wait "$pid" || { sleep 60 & pid=$!; wait "$pid"; }
-    done
+  - moodle-cron
   type: service
   default: true
   required: false
 
-build:
-  connect: true
-  dockerfile: Dockerfile
-  boilerplates:
-  - name: vanilla
-    title: Vanilla Moodle
-    repo: https://github.com/moodle/moodle
-    tag: ~5.3
-    pipeline: pipeline.yml
-    optionVersionConstraint: "^8.3"
-
 actions:
 # Installs Moodle on the first deployment and upgrades it on later ones, so the
-# web installer is never used: no one else can claim the site before its admin,
-# and no page is loaded while the installer rebuilds Moodle's caches.
+# web installer is never used; see moodle-update in the image.
 - name: upgrade
   title: Install or upgrade Moodle
   # A first install takes about five minutes, Wodby's default limit for an action.
   timeoutSeconds: 1800
   args:
-  - sh
-  - -c
-  - |
-    set -eu
-    # An installed site is upgraded when the deployed code is newer.
-    if php admin/cli/cfg.php --name=version >/dev/null 2>&1; then
-      exec php admin/cli/upgrade.php --non-interactive
-    fi
-    if [ -z "${MOODLE_ADMIN_PASSWORD:-}" ]; then
-      echo "Moodle is not installed, or its database can't be read. To install it, set the Admin password setting of this service and deploy again." >&2
-      exit 1
-    fi
-    # install_database.php stops when Moodle's tables exist, so a database that
-    # couldn't be read above is never installed over. It takes the password only
-    # as an argument, so it gets a throwaway one; the real password is set from
-    # the environment next and never appears in a process list.
-    php admin/cli/install_database.php --agree-license \
-      --adminuser="${MOODLE_ADMIN_USERNAME:-admin}" \
-      --adminpass="$(head -c 32 /dev/urandom | base64)" \
-      --adminemail="${MOODLE_ADMIN_EMAIL:-}" \
-      --fullname="${MOODLE_SITE_FULLNAME:-Moodle}" \
-      --shortname="${MOODLE_SITE_SHORTNAME:-moodle}"
-    # A password that doesn't meet Moodle's password policy must be changed at
-    # the first sign-in.
-    php -r '
-      define("CLI_SCRIPT", true);
-      require "config.php";
-      $admin = get_admin();
-      $password = getenv("MOODLE_ADMIN_PASSWORD");
-      update_internal_user_password($admin, $password);
-      $error = "";
-      if (!check_password_policy($password, $error, $admin)) {
-          set_user_preference("auth_forcepasswordchange", 1, $admin);
-          echo "The admin password does not meet the password policy; Moodle will ask for a new one at the first sign-in.\n";
-      }
-    '
+  - moodle-update
   type: post_deploy
 - name: purge_caches
   title: Purge all caches
@@ -186,6 +164,23 @@ actions:
   - admin/cli/purge_caches.php
   type: button
 
+deployment:
+  strategy: rolling
+  maxUnavailable: 0
+  maxSurge: 1
+  minReady: 10s
+  progressDeadline: 15m
+  shutdownGracePeriod: 30s
+
+helm:
+  name: wodby
+  source: oci://registry-1.docker.io/wodby/php-fpm
+  chart: oci://registry-1.docker.io/wodby/php-fpm
+  version: 0.3.3
+  valueMappings:
+    serviceAccountName: serviceAccount.name
+    serviceAccountCreate: serviceAccount.create
+
 workloads:
 - name: main
   selector:
@@ -193,10 +188,29 @@ workloads:
       app.kubernetes.io/instance: '{{helm.release}}'
   kind: deployment
   primary: true
+  helm:
+    labels: podLabels
+    annotations: podAnnotations
+    volumes: extraVolumes
+    sidecars: sidecars
   containers:
   - name: php
-    image: wodby/php
-    build: true
+    image: wodby/moodle
+    # A prebuilt image, so Wodby passes the app's addresses only on request:
+    # Moodle's address is WODBY_PRIMARY_URL.
+    routeMetadata: true
+    env:
+    - name: PHP_FPM_CLEAR_ENV
+      value: 'no'
+    - name: PHP_DISPLAY_ERRORS
+      value: 'Off'
+      envType: prod
+    - name: PHP_DISPLAY_STARTUP_ERRORS
+      value: 'Off'
+      envType: prod
+    helm:
+      resources: resources
+      env: envVars
+      mounts: extraVolumeMounts
 
-# Parent upgrades must not enable unvalidated workspace behavior.
 workspace: false

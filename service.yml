@@ -152,6 +152,8 @@ actions:
 # web installer is never used; see moodle-update in the image.
 - name: upgrade
   title: Install or upgrade Moodle
+  # A first install takes about five minutes, Wodby's default limit for an action.
+  timeoutSeconds: 1800
   args:
   - moodle-update
   type: post_deploy

@@ -139,6 +139,8 @@ actions:
 # and no page is loaded while the installer rebuilds Moodle's caches.
 - name: upgrade
   title: Install or upgrade Moodle
+  # A first install takes about five minutes, Wodby's default limit for an action.
+  timeoutSeconds: 1800
   args:
   - sh
   - -c

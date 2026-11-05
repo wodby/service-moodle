@@ -13,7 +13,7 @@ labels:
 options:
 - version: '5.3'
   default: true
-  tag: 5.3-r0
+  tag: 5.3-r1
 
 endpoints:
 - name: fpm

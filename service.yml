@@ -13,7 +13,7 @@ labels:
 options:
 - version: '5.3'
   default: true
-  tag: 5.3-r1
+  tag: 5.3-r2
   eol: '2029-10-01T00:00:00+00:00'
 
 endpoints:
@@ -113,18 +113,22 @@ settings:
 # from these values instead of its web installer.
 - name: admin-username
   title: Admin username
-  description: Username of the Moodle administrator created on the first deployment.
+  description: Username of the Moodle administrator created on the first 
+    deployment.
   default: admin
   var: MOODLE_ADMIN_USERNAME
 - name: admin-password
   title: Admin password
-  description: Password of the Moodle administrator created on the first deployment. A password that doesn't meet Moodle's password policy must be changed at the first sign-in.
+  description: Password of the Moodle administrator created on the first 
+    deployment. A password that doesn't meet Moodle's password policy must be 
+    changed at the first sign-in.
   required: true
   secret: true
   var: MOODLE_ADMIN_PASSWORD
 - name: admin-email
   title: Admin email
-  description: Email address of the Moodle administrator. When empty, Moodle asks for it at the first sign-in.
+  description: Email address of the Moodle administrator. When empty, Moodle 
+    asks for it at the first sign-in.
   var: MOODLE_ADMIN_EMAIL
 
 env:

@@ -13,7 +13,7 @@ labels:
 options:
 - version: '5.3'
   default: true
-  tag: 5.3-r3
+  tag: 5.3-r4
   eol: '2029-10-01T00:00:00+00:00'
 
 endpoints:

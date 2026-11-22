@@ -13,8 +13,8 @@ labels:
 options:
 - version: '5.3'
   default: true
-  tag: 5.3-r8
-  digest: sha256:230c5248cab3724f942efe161dae573e050991415b5374d30b325ba8df93b12d
+  tag: 5.3-r9
+  digest: sha256:fc9648c7b4fdcb943d550a3612690197c353e3b722a4d070b66112a871bf0883
   eol: '2029-10-01T00:00:00+00:00'
 
 endpoints:
